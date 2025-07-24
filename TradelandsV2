@@ -254,7 +254,7 @@ teleport_group:AddToggle('auto_goto_tree', {
 
 teleport_group:AddDivider()
 
-teleport_group:AddDropdown('ore_selector', {
+teleport_group:AddDropdown('Underdevving', {
     Values = ores,
     Default = selected_ore,
     Multi = false,
@@ -299,7 +299,7 @@ teleport_group:AddButton({
     Tooltip = 'Teleports you to selected Ore'
 })
 
-teleport_group:AddToggle('auto_goto_ore', {
+teleport_group:AddToggle('UnderDev', {
     Text = 'Auto Goto Ore',
     Default = goto_nearest_ore,
     Tooltip = 'Automatically goes to closest ore',
