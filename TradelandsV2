@@ -1,15 +1,17 @@
+-- Game loading check
 if not game:IsLoaded() then
     print("Waiting for game to load...")
     game.Loaded:Wait()
     print("Loaded Game")
 end
 
+-- Library setup
 local repo = 'https://raw.githubusercontent.com/KINGHUB01/Gui/main/'
-
 local library = loadstring(game:HttpGet(repo .. 'Gui%20Lib%20%5BLibrary%5D'))()
 local theme_manager = loadstring(game:HttpGet(repo .. 'Gui%20Lib%20%5BThemeManager%5D'))()
 local save_manager = loadstring(game:HttpGet(repo .. 'Gui%20Lib%20%5BSaveManager%5D'))()
 
+-- Window creation
 local window = library:CreateWindow({
     Title = 'Atlas Ware | Made By @dayumduh Tradelands',
     Center = true,
@@ -18,16 +20,19 @@ local window = library:CreateWindow({
     MenuFadeTime = 0.2
 })
 
+-- Tabs setup
 local tabs = {
     main = window:AddTab('Main'),
     ['ui settings'] = window:AddTab('UI Settings')
 }
 
+-- Groupboxes
 local game_group = tabs.main:AddLeftGroupbox('Game Settings')
 local player_group = tabs.main:AddRightGroupbox('Player Settings')
 local teleport_group = tabs.main:AddLeftGroupbox('Teleport Settings')
 local menu_group = tabs['ui settings']:AddLeftGroupbox('Menu')
 
+-- Services
 local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local tween_service = cloneref(game:GetService("TweenService"))
 local market = cloneref(game:GetService("MarketplaceService"))
@@ -38,32 +43,38 @@ local stats = cloneref(game:GetService("Stats"))
 local info = market:GetProductInfo(game.PlaceId)
 local local_player = players.LocalPlayer
 
+-- Game objects
 local tree = workspace.Trees
 local ore = workspace.OreNodes
 
+-- Variables
 local trees = {}
-local ores = {}
+local ores = {
+    "Blackwind Ores",
+    "Harrisburg Ores.T2",
+    "Harrisburg Ores.T3",
+    "Harrisburg Ores.T4",
+    "Harrisburg Ores.T5"
+    -- Add more ore paths here as needed
+}
 
 local selected_tree = ""
 local selected_ore = ""
-
 local tween_speed = 100
-
 local goto_nearest_tree = false
 local goto_nearest_ore = false
 local staff_check = false
 local auto_swing = false
+local velocity_connection = nil
 
+-- Populate trees list
 for _, v in next, tree:GetChildren() do
     if v.Name:find("Trees") then
         table.insert(trees, v.Name)
     end
 end
 
-for _, v in next, ore:GetChildren() do
-    table.insert(ores, v.Name)
-end
-
+-- Tree functions
 function closest_tree()
     local treee = nil
     local distance = math.huge
@@ -79,54 +90,80 @@ function closest_tree()
     return treee
 end
 
+-- Improved ore functions
+function get_ore_path_parts(path)
+    local parts = {}
+    for part in path:gmatch("[^.]+") do
+        table.insert(parts, part)
+    end
+    return parts
+end
+
 function closest_ore()
+    if selected_ore == "" then return nil end
+    
+    local path_parts = get_ore_path_parts(selected_ore)
+    local current_folder = ore
+    
+    -- Navigate through the path
+    for _, part in ipairs(path_parts) do
+        current_folder = current_folder:FindFirstChild(part)
+        if not current_folder then return nil end
+    end
+    
+    -- Find closest ore in the final folder
     local oree = nil
     local distance = math.huge
-    for _, v in next, ore:FindFirstChild(selected_ore):GetChildren() do
-        if v:IsA("MeshPart") then
-            local dist = (v:GetPivot().Position - local_player.Character:GetPivot().Position).Magnitude
+    
+    for _, v in next, current_folder:GetDescendants() do
+        if v:IsA("BasePart") and v.Transparency == 0 then
+            local dist = (v.Position - local_player.Character.HumanoidRootPart.Position).Magnitude
             if dist < distance then
                 distance = dist
                 oree = v
             end
         end
     end
+    
     return oree
 end
 
+-- Staff check
 players.PlayerAdded:Connect(function(v)
-    if staff_check then
-        if v ~= local_player then
-            local group = v:GetRankInGroup(2769167)
-            if group > 1 then
-                local_player:Kick("Staff detected! Username: "..v.DisplayName)
-            end
+    if staff_check and v ~= local_player then
+        local group = v:GetRankInGroup(2769167)
+        if group > 1 then
+            local_player:Kick("Staff detected! Username: "..v.DisplayName)
         end
     end
 end)
 
+-- Game settings
 game_group:AddDivider()
 
 game_group:AddToggle('auto_swing', {
     Text = 'Auto Swing',
     Default = auto_swing,
     Tooltip = 'Automatically swings for you',
-
     Callback = function(Value)
         auto_swing = Value
         if Value then
-            repeat
-                if local_player.Character and local_player.Character:FindFirstChildOfClass("Tool") then -- Didnt add stamina checks as it dosent take away stamina
-                    local_player.Character:FindFirstChildOfClass("Tool").ToolScript.Swing:FireServer("left", nil, 64)
-                    task.wait(.25)
-                    local_player.Character:FindFirstChildOfClass("Tool").ToolScript.Swing:FireServer("right", nil, 64)
+            coroutine.wrap(function()
+                while auto_swing do
+                    if local_player.Character and local_player.Character:FindFirstChildOfClass("Tool") then
+                        local tool = local_player.Character:FindFirstChildOfClass("Tool")
+                        tool.ToolScript.Swing:FireServer("left", nil, 64)
+                        task.wait(.25)
+                        tool.ToolScript.Swing:FireServer("right", nil, 64)
+                    end
+                    task.wait()
                 end
-                task.wait()
-            until not auto_swing
+            end)()
         end
     end
 })
 
+-- Player settings
 player_group:AddDivider()
 
 player_group:AddButton({
@@ -149,7 +186,6 @@ player_group:AddToggle('staff_check', {
     Text = 'Staff Check',
     Default = staff_check,
     Tooltip = 'Check if staff joined/are in server',
-
     Callback = function(Value)
         staff_check = Value
         if Value then
@@ -165,16 +201,16 @@ player_group:AddToggle('staff_check', {
     end
 })
 
+-- Teleport settings
 teleport_group:AddDivider()
 
+-- Tree teleport
 teleport_group:AddDropdown('tree_selector', {
     Values = trees,
     Default = selected_tree,
     Multi = false,
-
     Text = 'Select Tree To Teleport To:',
     Tooltip = 'Teleports you to selected tree',
-
     Callback = function(Value)
         selected_tree = Value
     end
@@ -191,19 +227,29 @@ teleport_group:AddButton({
         if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
             local tree = closest_tree()
             if tree then
-                local velocity_connection = run_service.Heartbeat:Connect(function()
-                    if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
-                        local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                        local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-                    end
-                end)
-                local to = tree:GetPivot().Position
-                local distance = (to - local_player.Character:GetPivot().Position).Magnitude
-                local tween = tween_service:Create(local_player.Character.HumanoidRootPart, TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = CFrame.new(tree:GetPivot().Position) + Vector3.new(0, -10, 3)})
-                tween:Play()
-                tween.Completed:Wait()
                 if velocity_connection then
                     velocity_connection:Disconnect()
+                end
+                
+                velocity_connection = run_service.Heartbeat:Connect(function()
+                    local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                    local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                end)
+                
+                local to = tree:GetPivot().Position
+                local distance = (to - local_player.Character.HumanoidRootPart.Position).Magnitude
+                local tween = tween_service:Create(
+                    local_player.Character.HumanoidRootPart, 
+                    TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear), 
+                    {CFrame = CFrame.new(to) + Vector3.new(0, -10, 3)}
+                )
+                
+                tween:Play()
+                tween.Completed:Wait()
+                
+                if velocity_connection then
+                    velocity_connection:Disconnect()
+                    velocity_connection = nil
                 end
             end
         end
@@ -216,7 +262,6 @@ teleport_group:AddToggle('auto_goto_tree', {
     Text = 'Auto Goto Tree',
     Default = goto_nearest_tree,
     Tooltip = 'Automatically goes to closest tree',
-
     Callback = function(Value)
         goto_nearest_tree = Value
         if Value then
@@ -226,42 +271,53 @@ teleport_group:AddToggle('auto_goto_tree', {
                 return
             end
 
-            repeat
-                if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
-                    local tree = closest_tree()
-                    if tree then
-                        local velocity_connection = run_service.Heartbeat:Connect(function()
-                            if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
+            coroutine.wrap(function()
+                while goto_nearest_tree do
+                    if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
+                        local tree = closest_tree()
+                        if tree then
+                            if velocity_connection then
+                                velocity_connection:Disconnect()
+                            end
+                            
+                            velocity_connection = run_service.Heartbeat:Connect(function()
                                 local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
                                 local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                            end)
+                            
+                            local to = tree:GetPivot().Position
+                            local distance = (to - local_player.Character.HumanoidRootPart.Position).Magnitude
+                            local tween = tween_service:Create(
+                                local_player.Character.HumanoidRootPart, 
+                                TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear), 
+                                {CFrame = CFrame.new(to) + Vector3.new(0, -10, 3)}
+                            )
+                            
+                            tween:Play()
+                            tween.Completed:Wait()
+                            
+                            if velocity_connection then
+                                velocity_connection:Disconnect()
+                                velocity_connection = nil
                             end
-                        end)
-                        local to = tree:GetPivot().Position
-                        local distance = (to - local_player.Character:GetPivot().Position).Magnitude
-                        local tween = tween_service:Create(local_player.Character.HumanoidRootPart, TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = CFrame.new(tree:GetPivot().Position) + Vector3.new(0, -10, 3)})
-                        tween:Play()
-                        tween.Completed:Wait()
-                        if velocity_connection then
-                            velocity_connection:Disconnect()
                         end
                     end
+                    task.wait()
                 end
-                task.wait()
-            until not goto_nearest_tree
+            end)()
         end
     end
 })
 
 teleport_group:AddDivider()
 
-teleport_group:AddDropdown('Underdevving', {
+-- Ore teleport
+teleport_group:AddDropdown('ore_selector', {
     Values = ores,
     Default = selected_ore,
     Multi = false,
-
     Text = 'Select Ore To Teleport To:',
     Tooltip = 'Teleports you to selected ore',
-
     Callback = function(Value)
         selected_ore = Value
     end
@@ -276,22 +332,34 @@ teleport_group:AddButton({
         end
 
         if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
-            local ore = closest_ore()
-            if ore then
-                local velocity_connection = run_service.Heartbeat:Connect(function()
-                    if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
-                        local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                        local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-                    end
-                end)
-                local to = ore:GetPivot().Position
-                local distance = (to - local_player.Character:GetPivot().Position).Magnitude
-                local tween = tween_service:Create(local_player.Character.HumanoidRootPart, TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 0, false, 0), {CFrame = CFrame.new(ore:GetPivot().Position) + Vector3.new(0, 0, 2.5)})
-                tween:Play()
-                tween.Completed:Wait()
+            local ore_node = closest_ore()
+            if ore_node then
                 if velocity_connection then
                     velocity_connection:Disconnect()
                 end
+                
+                velocity_connection = run_service.Heartbeat:Connect(function()
+                    local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                    local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                end)
+                
+                local to = ore_node.Position
+                local distance = (to - local_player.Character.HumanoidRootPart.Position).Magnitude
+                local tween = tween_service:Create(
+                    local_player.Character.HumanoidRootPart, 
+                    TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear), 
+                    {CFrame = CFrame.new(to) + Vector3.new(0, 0, 2.5)}
+                )
+                
+                tween:Play()
+                tween.Completed:Wait()
+                
+                if velocity_connection then
+                    velocity_connection:Disconnect()
+                    velocity_connection = nil
+                end
+            else
+                library:Notify("No valid ore node found")
             end
         end
     end,
@@ -299,11 +367,10 @@ teleport_group:AddButton({
     Tooltip = 'Teleports you to selected Ore'
 })
 
-teleport_group:AddToggle('UnderDev', {
+teleport_group:AddToggle('auto_goto_ore', {
     Text = 'Auto Goto Ore',
     Default = goto_nearest_ore,
     Tooltip = 'Automatically goes to closest ore',
-
     Callback = function(Value)
         goto_nearest_ore = Value
         if Value then
@@ -313,59 +380,43 @@ teleport_group:AddToggle('UnderDev', {
                 return
             end
 
-            task.spawn(function()
-                local Players = game:GetService("Players")
-                local TweenService = game:GetService("TweenService")
-                local LocalPlayer = Players.LocalPlayer
-
-                local function getClosestOreNode()
-                    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-                    local root = character:WaitForChild("HumanoidRootPart")
-
-                    local closestNode
-                    local shortestDistance = math.huge
-
-                    for _, folder in pairs(workspace:WaitForChild("OreNodes"):GetChildren()) do
-                        for _, ore in pairs(folder:GetChildren()) do
-                            if ore:IsA("BasePart") and ore.Transparency == 0 then
-                                local dist = (root.Position - ore.Position).Magnitude
-                                if dist < shortestDistance then
-                                    shortestDistance = dist
-                                    closestNode = ore
-                                end
+            coroutine.wrap(function()
+                while goto_nearest_ore do
+                    if local_player.Character and local_player.Character:FindFirstChild("HumanoidRootPart") then
+                        local ore_node = closest_ore()
+                        if ore_node then
+                            if velocity_connection then
+                                velocity_connection:Disconnect()
+                            end
+                            
+                            velocity_connection = run_service.Heartbeat:Connect(function()
+                                local_player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                local_player.Character.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                            end)
+                            
+                            local to = ore_node.Position
+                            local distance = (to - local_player.Character.HumanoidRootPart.Position).Magnitude
+                            local tween = tween_service:Create(
+                                local_player.Character.HumanoidRootPart, 
+                                TweenInfo.new(distance / tween_speed, Enum.EasingStyle.Linear), 
+                                {CFrame = CFrame.new(to) + Vector3.new(0, 0, 2.5)}
+                            )
+                            
+                            tween:Play()
+                            tween.Completed:Wait()
+                            
+                            if velocity_connection then
+                                velocity_connection:Disconnect()
+                                velocity_connection = nil
                             end
                         end
                     end
-                    return closestNode
-                end
-
-                local function tweenTo(target)
-                    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-                    local root = character:WaitForChild("HumanoidRootPart")
-
-                    local offsetDirection = (root.Position - target.Position).Unit
-                    local offset = offsetDirection * 5
-                    local goalPosition = target.Position + offset
-
-                    local lookAtCFrame = CFrame.new(goalPosition, target.Position)
-                    local tweenInfo = TweenInfo.new(0.7, Enum.EasingStyle.Linear)
-                    local tween = TweenService:Create(root, tweenInfo, {CFrame = lookAtCFrame})
-                    tween:Play()
-                    tween.Completed:Wait()
-                end
-
-                while goto_nearest_ore do
-                    local ore = getClosestOreNode()
-                    if ore then
-                        tweenTo(ore)
-                    end
                     task.wait(0.5)
                 end
-            end)
+            end)()
         end
     end
 })
-
 
 teleport_group:AddDivider()
 
@@ -376,45 +427,58 @@ teleport_group:AddSlider('speed_slider', {
     Max = 500,
     Rounding = 0,
     Compact = false,
-
     Callback = function(Value)
         tween_speed = Value
     end
 })
 
+-- Watermark
 local FrameTimer = tick()
-local FrameCounter = 0;
-local FPS = 60;
+local FrameCounter = 0
+local FPS = 60
 
 local watermark_connection = run_service.RenderStepped:Connect(function()
-    FrameCounter += 1;
+    FrameCounter = FrameCounter + 1
 
     if (tick() - FrameTimer) >= 1 then
-        FPS = FrameCounter;
-        FrameTimer = tick();
-        FrameCounter = 0;
-    end;
+        FPS = FrameCounter
+        FrameTimer = tick()
+        FrameCounter = 0
+    end
 
-    library:SetWatermark(('Atlas Ware | %s fps | %s ms | game: ' .. info.Name .. ''):format(
+    library:SetWatermark(('Atlas Ware | %s fps | %s ms | game: ' .. info.Name):format(
         math.floor(FPS),
         math.floor(stats.Network.ServerStatsItem['Data Ping']:GetValue())
-    ));
-end);
+    ))
+end)
 
+-- UI Settings
 menu_group:AddButton('Unload', function()
     goto_nearest_tree = false
     goto_nearest_ore = false
     staff_check = false
     auto_swing = false
+    
     if velocity_connection then
         velocity_connection:Disconnect()
     end
-    watermark_connection:Disconnect()
+    
+    if watermark_connection then
+        watermark_connection:Disconnect()
+    end
+    
     library:Unload()
 end)
 
-menu_group:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', { Default = 'End', NoUI = true, Text = 'Menu keybind' })
+menu_group:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', { 
+    Default = 'End', 
+    NoUI = true, 
+    Text = 'Menu keybind' 
+})
+
 library.ToggleKeybind = Options.MenuKeybind
+
+-- Theme and save managers
 theme_manager:SetLibrary(library)
 save_manager:SetLibrary(library)
 save_manager:IgnoreThemeSettings()
